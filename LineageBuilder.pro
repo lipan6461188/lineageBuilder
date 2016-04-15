@@ -1,9 +1,11 @@
 QT += core
-QT -= gui
+QT += gui
+QT += widgets
+
 
 TARGET = LineageBuilder
-CONFIG += console
-CONFIG -= app_bundle
+
+CONFIG += app_bundle
 
 TEMPLATE = app
 

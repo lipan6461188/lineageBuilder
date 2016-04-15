@@ -50,6 +50,9 @@ typedef struct QuadProgPPStruct
     QList<float> ExpressionValue;
     QList<float> i_and_d;
     float minValue;
+    double psi;
+    float ci;
+    float cd;
 } *ProgPP;
 
 
@@ -59,7 +62,7 @@ class BiTree:QObject
    // Q_OBJECT
 public:
     //构造函数的参数为构造二叉树的文件名
-    BiTree(const QString filename);
+    BiTree(const QString filename, float Ci, float Cd, double psi, int width, int height);
     //析构函数要负责回收节点空间
     ~BiTree(){};
 
@@ -86,7 +89,7 @@ public:
     //从文件中同时读取多个基因的表达值
     void readMultiGeneExpressionFromFile(const QString filename);
     //多线程运行程序
-    void runOnMultiThread(int threadsNum);
+    void runOnMultiThread(int threadsNum, bool inBoost=false);
     //一次执行所有流程
     void runInFlash(QString filename="../data/expression");
     //初始化环境，以便下一次执行
@@ -95,6 +98,12 @@ public:
     void initNewGene(SingleGeneLeafExpresion singlegene);
     //根据多线程计算的结果，把每一个基因在每一个细胞中的表达量计算出来
     void computeExpressionEveryCell();
+    //存储所有每一个细胞中所有基因的表达值
+    void saveExpressionIntoFile(QString fileName);
+    //从所有的文件中读取基因表达数据
+    void importGeneExpressionToTree(QString fileName);
+    //得到每一个非叶子节点的asymmetry
+    QHash<QString, float> computeAsymmetry();
 
     //构造二次规划运行矩阵，并运行
   //  static float runQuadProgPP(ProgPP quadprogpp);
@@ -108,6 +117,11 @@ public:
     TreeNode RootNode(){ return root; }
     /*获取I_and_D*/
     QList<float> getIAndD(){ return i_and_d; }
+    /*得到基因的名字*/
+    QStringList getGeneList(){ return geneList; }
+    /*获取所有的叶子节点的名字*/
+    QStringList getAllLeafNodeNames();
+    QList<TreeNode> getNodes(){ return Nodes; }
 
     /*调试函数*/
     /*
@@ -187,7 +201,15 @@ private:
     SingleGeneLeafExpresion leafExpression; //记录所有叶子的表达
     SingleGeneExpression allExpression;     //记录所有基因的表达
 
+    QStringList geneList;                   //基因名字的列表
 
+    int TREE_WIDTH;
+    int TREE_HEIGHT;
+
+    //算法的三个参数
+    float Ci;
+    float Cd;
+    double psi;
 
 
 };
