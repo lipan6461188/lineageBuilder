@@ -5,6 +5,7 @@
 #include <QtGui/QPainter>
 #include <QDir>
 #include <QTime>
+#include <QTimer>
 using namespace std;
 
 /*
@@ -29,6 +30,7 @@ void PrintHelp() {
     cout << "-d <rootPath>: the directory files to save (default: ./)\n";
     cout << "--width <int>: picture width (default: 1500)\n";
     cout << "--height <int>: picture height (default: 500)\n";
+    cout << "--timer <int>: the limited time to wait a thread (default: unlimited)\n";
     cout << "--random <int,int,int,string>: generate random expression (default no)\n";
     cout << "-v: verbose output (default no)\n\n";
     cout << "\n\n";
@@ -83,6 +85,8 @@ int main(int argc, char *argv[])
     int random_amount = 0;
     int random_min = 0;
     int random_max = 0;
+    unsigned long _timer = ULONG_MAX;
+
 
     //绘图属性
     QString lineColor = "blue";
@@ -126,6 +130,10 @@ int main(int argc, char *argv[])
         }
         if (!strcmp(argv[i], "-a")) {
             asymetryFileName = argv[i + 1];
+            i++;
+        }
+        if (!strcmp(argv[i], "--timer")) {
+            _timer = QString(argv[i + 1]).toInt();
             i++;
         }
         if (!strcmp(argv[i], "--expression")) {
@@ -300,7 +308,8 @@ int main(int argc, char *argv[])
             exit(-1);
         }
         bitree->readMultiGeneExpressionFromFile(leafNodeExpressionFileName);
-            bitree->runOnMultiThread(threads_to_run,will_run_in_boost);
+        //timer
+        bitree->runOnMultiThread(threads_to_run,will_run_in_boost,_timer);
         if(expressionFileName != "")
         {
             bitree->saveExpressionIntoFile(rootPath+"/"+expressionFileName);

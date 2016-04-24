@@ -1,5 +1,7 @@
 #include "quadprog.h"
 #include "common.h"
+#include <QObject>
+#include <QTimer>
 
 const int MAX = 100;  //树的最大层数
 
@@ -56,10 +58,54 @@ typedef struct QuadProgPPStruct
 } *ProgPP;
 
 
+class MyThread : public QThread
+{
+ //   Q_OBJECT
+protected:
+    void run()
+    {
+        if(inBoost)
+            runQuadProgPP_inboost(quadprogpp);
+        else
+            runQuadProgPP(quadprogpp);
+    }
+public:
+    //构造函数
+   MyThread(ProgPP quadprogpp,QString geneName,bool inBoost = false,QObject *parent = 0):QThread(parent)
+    {
+        this->quadprogpp = quadprogpp;
+        this->inBoost = inBoost;
+        this->geneName = geneName;
+       this->thread_stop = new bool(false);
+        QThread::setTerminationEnabled(true);
+    }
+
+    //构造二次规划运行矩阵，并运行
+    void runQuadProgPP(ProgPP quadprogpp);
+    void runQuadProgPP_inboost(ProgPP quadprogpp);
+    ProgPP getquadprogpp(){return quadprogpp;}
+    QString getGeneName(){ return geneName; }
+
+    ~MyThread()
+    {
+        delete thread_stop;
+    }
+
+private:
+    ProgPP quadprogpp;
+    bool inBoost;
+
+    QString geneName;
+
+public:
+    bool *thread_stop;
+};
+
+
 //定义二叉树类
 class BiTree:QObject
 {
-   // Q_OBJECT
+    Q_OBJECT
 public:
     //构造函数的参数为构造二叉树的文件名
     BiTree(const QString filename, float Ci, float Cd, double psi, int width, int height);
@@ -89,7 +135,7 @@ public:
     //从文件中同时读取多个基因的表达值
     void readMultiGeneExpressionFromFile(const QString filename);
     //多线程运行程序
-    void runOnMultiThread(int threadsNum, bool inBoost=false);
+    void runOnMultiThread(int threadsNum, bool inBoost=false,int _timer=ULONG_MAX);
     //一次执行所有流程
     void runInFlash(QString filename="../data/expression");
     //初始化环境，以便下一次执行
@@ -203,6 +249,10 @@ private:
 
     QStringList geneList;                   //基因名字的列表
 
+    QList<MyThread *> Threads;                 //线程列表
+
+    int leafNodesNum;
+
     int TREE_WIDTH;
     int TREE_HEIGHT;
 
@@ -212,40 +262,9 @@ private:
     double psi;
 
 
+
 };
 
-
-class MyThread : public QThread
-{
- //   Q_OBJECT
-protected:
-    void run()
-    {
-        if(inBoost)
-            runQuadProgPP_inboost(quadprogpp);
-        else
-            runQuadProgPP(quadprogpp);
-    }
-public:
-    //构造函数
-   MyThread(ProgPP quadprogpp,QString geneName,bool inBoost = false,QObject *parent = 0):QThread(parent)
-    {
-        this->quadprogpp = quadprogpp;
-        this->inBoost = inBoost;
-        this->geneName = geneName;
-    }
-
-    //构造二次规划运行矩阵，并运行
-    void runQuadProgPP(ProgPP quadprogpp);
-    void runQuadProgPP_inboost(ProgPP quadprogpp);
-    ProgPP getquadprogpp(){return quadprogpp;}
-    QString getGeneName(){ return geneName; }
-
-private:
-    ProgPP quadprogpp;
-    bool inBoost;
-    QString geneName;
-};
 
 
 

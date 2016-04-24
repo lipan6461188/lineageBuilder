@@ -37,7 +37,7 @@ void print_vector(const char* name, const Vector<T>& v, int n = -1);
 double solve_quadprog(Matrix<double>& G, Vector<double>& g0,
                       const Matrix<double>& CE, const Vector<double>& ce0,
                       const Matrix<double>& CI, const Vector<double>& ci0,
-                      Vector<double>& x)
+                      Vector<double>& x, bool *thread_stop)
 {
   std::ostringstream msg;
   {
@@ -108,12 +108,12 @@ double solve_quadprog(Matrix<double>& G, Vector<double>& g0,
   q = 0;  /* size of the active set A (containing the indices of the active constraints) */
 #ifdef TRACE_SOLVER
   std::cout << std::endl << "Starting solve_quadprog" << std::endl;
-  print_matrix("G", G);
-  print_vector("g0", g0);
-  print_matrix("CE", CE);
-  print_vector("ce0", ce0);
-  print_matrix("CI", CI);
-  print_vector("ci0", ci0);
+//  print_matrix("G", G);
+//  print_vector("g0", g0);
+//  print_matrix("CE", CE);
+//  print_vector("ce0", ce0);
+//  print_matrix("CI", CI);
+//  print_vector("ci0", ci0);
 #endif
 
   /*
@@ -130,7 +130,7 @@ double solve_quadprog(Matrix<double>& G, Vector<double>& g0,
   /* decompose the matrix G in the form L^T L */
   cholesky_decomposition(G);
 #ifdef TRACE_SOLVER
-  print_matrix("G", G);
+//  print_matrix("G", G);
 #endif
   /* initialize the matrix R */
   for (i = 0; i < n; i++)
@@ -153,7 +153,7 @@ double solve_quadprog(Matrix<double>& G, Vector<double>& g0,
     d[i] = 0.0;
   }
 #ifdef TRACE_SOLVER
-  print_matrix("J", J);
+//  print_matrix("J", J);
 #endif
 
   /* c1 * c2 is an estimate for cond(G) */
@@ -170,8 +170,9 @@ double solve_quadprog(Matrix<double>& G, Vector<double>& g0,
   f_value = 0.5 * scalar_product(g0, x);
 #ifdef TRACE_SOLVER
   std::cout << "Unconstrained solution: " << f_value << std::endl;
-  print_vector("x", x);
+ // print_vector("x", x);
 #endif
+
 
   /* Add equality constraints to the working set A */
   iq = 0;
@@ -183,10 +184,10 @@ double solve_quadprog(Matrix<double>& G, Vector<double>& g0,
     update_z(z, J, d, iq);
     update_r(R, r, d, iq);
 #ifdef TRACE_SOLVER
-    print_matrix("R", R, n, iq);
-    print_vector("z", z);
-    print_vector("r", r, iq);
-    print_vector("d", d);
+//    print_matrix("R", R, n, iq);
+//    print_vector("z", z);
+//    print_vector("r", r, iq);
+//    print_vector("d", d);
 #endif
 
     /* compute full step length t2: i.e., the minimum step in primal space s.t. the contraint
@@ -221,8 +222,9 @@ double solve_quadprog(Matrix<double>& G, Vector<double>& g0,
     iai[i] = i;
 
 l1:	iter++;
+ // std::cout << "======>l1<====="<<std::endl;
 #ifdef TRACE_SOLVER
-  print_vector("x", x);
+//  print_vector("x", x);
 #endif
   /* step 1: choose a violated constraint */
   for (i = p; i < iq; i++)
@@ -246,7 +248,7 @@ l1:	iter++;
     psi += std::min(0.0, sum);
   }
 #ifdef TRACE_SOLVER
-  print_vector("s", s, m);
+ // print_vector("s", s, m);
 #endif
 
 
@@ -269,6 +271,7 @@ l1:	iter++;
     x_old[i] = x[i];
 
 l2: /* Step 2: check for feasibility and determine a new S-pair */
+ // std::cout << "======>l2<====="<<std::endl;
     for (i = 0; i < m; i++)
     {
       if (s[i] < ss && iai[i] != -1 && iaexcl[i])
@@ -298,6 +301,8 @@ l2: /* Step 2: check for feasibility and determine a new S-pair */
 #endif
 
 l2a:/* Step 2a: determine step direction */
+  if( *thread_stop ) return -1;
+ // std::cout << "======>l2a<====="<<std::endl;
     /* compute z = H np: the step direction in the primal space (through J, see the paper) */
     compute_d(d, J, np);
   update_z(z, J, d, iq);
@@ -423,7 +428,7 @@ l2a:/* Step 2a: determine step direction */
 #ifdef TRACE_SOLVER
     print_matrix("R", R);
     print_vector("A", A, iq);
-        print_vector("iai", iai);
+    print_vector("iai", iai);
 #endif
     goto l1;
   }

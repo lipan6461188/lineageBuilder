@@ -14,8 +14,9 @@
 namespace ublas = boost::numeric::ublas;
 int edgeIndex = 0;      //记录边的索引，是一个全局变量
 
-
-
+int current_index = 0;
+int timer_start_index = 0;      //计时器开启时的线程堆索引
+//int timer_end_index = 0;        //计时器响应时的线程索引
 
 //得到一个新的节点
 TreeNode getNewNode(QString name)
@@ -130,6 +131,14 @@ BiTree::BiTree(const QString filename,float Ci,float Cd,double psi,int width,int
     TraversalTree(RootNode());
     //计算每一个节点的坐标
     computeCoordinate(RootNode(),TREE_HEIGHT,TREE_WIDTH);
+
+    leafNodesNum = 0;
+    for(int i=0;i<Nodes.size();i++)
+    {
+        if (Nodes[i] == NULL) continue;
+        if( Nodes[i]->lchild == NULL && Nodes[i]->rchild == NULL )
+            leafNodesNum++;
+    }
 }
 
 
@@ -362,6 +371,7 @@ void BiTree::readMultiGeneExpressionFromFile(const QString filename)
     bool is_first_line = 1;
    // QStringList geneNameList;   //记录所有基因的名字
     QList< QList<QString> > leafExpressinMatrix;    //所有叶子节点的表达量矩阵
+    QStringList readInLeafNodeNames;
     int columnsAmount=0;          //列数
     int leafNodeAmount=0;         //叶子节点的数目
     while (!in.atEnd())
@@ -370,6 +380,7 @@ void BiTree::readMultiGeneExpressionFromFile(const QString filename)
         QStringList fields = line.split("\t");
         if ( is_first_line )
         {
+            //readInLeafNodeNames = fields;
             columnsAmount = fields.size() + 1;
             geneList.append(fields);
             fields.insert(0,"###");
@@ -390,7 +401,60 @@ void BiTree::readMultiGeneExpressionFromFile(const QString filename)
      }
     file.close();
 
+    //std::cout << leafExpressinMatrix.size() << "\t" << this->leafNodesNum << endl;
+
   //  cout<<leafExpressinMatrix.size()<<endl;
+
+    //检查是否所有的叶子节点都有表达量
+    QStringList leafNodesNames;
+    for(int i=0;i<Nodes.size();i++)
+    {
+        if (Nodes[i] == NULL) continue;
+        if( Nodes[i]->lchild == NULL && Nodes[i]->rchild == NULL )
+            leafNodesNames.append( Nodes[i]->nodeName );
+    }
+    bool can_go_on = true;
+    for(int i=0; i<leafNodesNames.size(); i++)
+    {
+        bool find = false;
+        for(int j=1;j<leafExpressinMatrix.size();j++)
+        {
+            if(leafNodesNames[i].toUpper() == leafExpressinMatrix[j][0].toUpper() )
+            {
+               // cout << qPrintable(readInLeafNodeNames[j].toUpper());
+                find = true;
+                continue;
+            }
+        }
+        if( !find )
+        {
+            can_go_on = false;
+            cout << "leaf node cannot be found: "<<qPrintable( leafNodesNames[i] ) << endl;
+        }
+    }
+    if( !can_go_on ) exit(-1);
+    cout << endl << endl;
+    //检查是否所有提供的叶子节点表达量都在树中
+    for(int j=1;j<leafExpressinMatrix.size();j++)
+    {
+        bool find = true;
+        for(int i=0; i<leafNodesNames.size(); i++)
+        {
+            bool find = false;
+            if(leafNodesNames[i].toUpper() == leafExpressinMatrix[j][0].toUpper() )
+            {
+                find = true;
+                continue;
+            }
+        }
+        if( !find )
+        {
+            can_go_on = false;
+            cout << "leaf with expression cannot be found: "<<qPrintable( leafExpressinMatrix[j][0] ) << endl;
+        }
+    }
+    if( !can_go_on ) exit(-1);
+
 
     for(int i=0; i<columnsAmount-1; i++)
     {
@@ -476,8 +540,10 @@ void BiTree::initNewGene(SingleGeneLeafExpresion singlegene)
 }
 
 //多线程运行程序
-void BiTree::runOnMultiThread(int threadsNum,bool inBoost)
+void BiTree::runOnMultiThread(int threadsNum,bool inBoost,int _timer)
 {
+    int rubushThreads = 0;
+   // QThread::setTerminationEnabled(true);
     int leafExpressionAmount = 0;   //需要运行的基因个数
     SingleGeneLeafExpresion item = leafExpression;
     while(item) { leafExpressionAmount++; item = item->next; }
@@ -508,10 +574,11 @@ void BiTree::runOnMultiThread(int threadsNum,bool inBoost)
             progPP[i].psi = this->psi;
             progPP[i].ci = this->Ci;
             progPP[i].cd = this->Cd;
+           // progPP[i].thread_stop = false;
             geneNames.append(start_gene->geneName);
             start_gene = start_gene->next;
         }
-        QList<MyThread *> Threads;
+        //QList<MyThread *> Threads;
         for(int i=0; i< threadsNum;i++)
         {
             Threads.append(new MyThread( &progPP[i],geneNames[i],inBoost));
@@ -520,17 +587,28 @@ void BiTree::runOnMultiThread(int threadsNum,bool inBoost)
             threadCount++;
         }
         geneNames.clear();
+        current_index++;
         //等待所有的线程执行完毕
         for(int i=0;i < threadsNum;i++)
         {
-            Threads.at(i)->wait();
-            SingleGeneExpression geneExpression = new AllExpression;
-            geneExpression->geneName = Threads.at(i)->getGeneName();
-            geneExpression->i_and_d =Threads.at(i)->getquadprogpp()->i_and_d;
-            geneExpression -> next = allExpression;
-            geneExpression->quadprogminValue = Threads.at(i)->getquadprogpp()->minValue;
-            allExpression = geneExpression;
-            cout<<"线程执行完毕: "<< Threads.at(i)->currentThreadId() << "  " << qPrintable(geneExpression->geneName) <<endl;
+            bool finished = Threads.at(i)->wait(_timer);
+            if( !finished )
+                //如果线程还没有结束
+            {
+                *(Threads.at(i)->thread_stop) = true;
+                Threads.at(i)->wait();
+                rubushThreads++;
+                cout << "线程被强制关闭："<< Threads.at(i)->currentThreadId() << "  " << qPrintable( Threads.at(i)->getGeneName() ) <<endl;
+                cout << "垃圾线程数：" << rubushThreads << endl;
+            }else{
+                SingleGeneExpression geneExpression = new AllExpression;
+                geneExpression->geneName = Threads.at(i)->getGeneName();
+                geneExpression->i_and_d =Threads.at(i)->getquadprogpp()->i_and_d;
+                geneExpression -> next = allExpression;
+                geneExpression->quadprogminValue = Threads.at(i)->getquadprogpp()->minValue;
+                allExpression = geneExpression;
+                cout<<"线程执行完毕: "<< Threads.at(i)->currentThreadId() << "  " << qPrintable(geneExpression->geneName) <<endl;
+            }
         }
         //回收所有的线程
         qDeleteAll(Threads);
@@ -557,10 +635,11 @@ void BiTree::runOnMultiThread(int threadsNum,bool inBoost)
         progPP[i].psi = this->psi;
         progPP[i].ci = this->Ci;
         progPP[i].cd = this->Cd;
+     //   progPP[i].thread_stop = false;
         geneNames.append(start_gene->geneName);
         start_gene = start_gene->next; //向下走一步
     }
-    QList<MyThread *> Threads;
+    //QList<MyThread *> Threads;
     for(int i=0; i< geneLeft;i++)
     {
         Threads.append(new MyThread( &progPP[i],geneNames[i],inBoost));
@@ -568,20 +647,33 @@ void BiTree::runOnMultiThread(int threadsNum,bool inBoost)
         Threads.last()->start();
         threadCount++;
     }
+    current_index++;
     for(int i=0;i < geneLeft;i++)
     {
-        Threads.at(i)->wait();
-        SingleGeneExpression geneExpression = new AllExpression;
-        geneExpression->geneName = Threads.at(i)->getGeneName();
-        geneExpression->i_and_d =Threads.at(i)->getquadprogpp()->i_and_d;
-        geneExpression -> next = allExpression;
-        geneExpression->quadprogminValue = Threads.at(i)->getquadprogpp()->minValue;
-        allExpression = geneExpression;
-        cout<<"线程执行完毕: "<< Threads.at(i)->currentThreadId() << "  " << qPrintable(geneExpression->geneName) <<endl;
+       // Threads.at(i)->setTerminationEnabled(true);
+        bool finished = Threads.at(i)->wait(_timer);
+        if( !finished )
+            //如果是强制关闭的
+        {
+            *(Threads.at(i)->thread_stop) = true;
+            Threads.at(i)->wait();
+            rubushThreads++;
+            //Threads.at(i)->exit(-1);
+            cout << "线程被强制关闭："<< Threads.at(i)->currentThreadId() << "  " << qPrintable(Threads.at(i)->getGeneName()) <<endl;
+            cout << "垃圾线程数：" << rubushThreads << endl;
+
+        }else{
+            SingleGeneExpression geneExpression = new AllExpression;
+            geneExpression->geneName = Threads.at(i)->getGeneName();
+            geneExpression->i_and_d =Threads.at(i)->getquadprogpp()->i_and_d;
+            geneExpression -> next = allExpression;
+            geneExpression->quadprogminValue = Threads.at(i)->getquadprogpp()->minValue;
+            allExpression = geneExpression;
+            cout<<"线程执行完毕: "<< Threads.at(i)->currentThreadId() << "  " << qPrintable(geneExpression->geneName) <<endl;
+        }
     }
     qDeleteAll(Threads);
     Threads.clear();
-
 
     //这里还不能删除叶子节点的表达量，后面还要使用
     computeExpressionEveryCell();
@@ -900,7 +992,7 @@ void MyThread::runQuadProgPP(ProgPP quadprogpp)
     //x是要求的向量
     x.resize(n);
 
-   minValue = QuadProgPP::solve_quadprog(G, g0, CE, ce0, CI, ci0, x);
+   minValue = QuadProgPP::solve_quadprog(G, g0, CE, ce0, CI, ci0, x,this->thread_stop);
    // cout<<"最小值"<<minValue<<endl;
     for(int i=0;i<2*edgeAmount;i++)
         if(x[i] > 0)
