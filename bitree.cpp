@@ -38,6 +38,7 @@ BiTree::BiTree(const QString filename,float Ci,float Cd,double psi,int width,int
     this->psi = psi;
     this->TREE_HEIGHT = height;
     this->TREE_WIDTH = width;
+    this->nMax = 0;
     for(int i=0;i<MAX;i++) nNumArray[i] = 0;
     nodeAmount = edgeAmount = 0;
     highestExpression = 0;
@@ -96,16 +97,15 @@ BiTree::BiTree(const QString filename,float Ci,float Cd,double psi,int width,int
         }
     }
     file.close();
-    nodeAmount = NodeNames.size();
-    edgeAmount = nodeAmount - 1;
+   // nodeAmount = NodeNames.size();
 
     //检查所有的节点是否可以组成一颗树
-    bool *checkHistory = new bool[nodeAmount];
-    for(int i=0; i<nodeAmount;i++) checkHistory[i] = 0;
+    bool *checkHistory = new bool[NodeNames.size()];
+    for(int i=0; i<NodeNames.size();i++) checkHistory[i] = 0;
     CheckAllNode(checkHistory,Nodes.first());
     bool is_first_time = 1;
     int inValid_node_amount = 0;  //记录没有扫描到的节点数
-    for(int i=0; i<nodeAmount;i++)
+    for(int i=0; i<NodeNames.size();i++)
     {
         if(checkHistory[i] == 0)
         {
@@ -123,8 +123,20 @@ BiTree::BiTree(const QString filename,float Ci,float Cd,double psi,int width,int
     }
     delete checkHistory;
 
-    nodeAmount -= inValid_node_amount;
-    edgeAmount = nodeAmount - 1;
+  //  nodeAmount -= inValid_node_amount;
+   // edgeAmount = nodeAmount - 1;
+
+    //计算节点数与边的数量
+    for(int i=0;i<Nodes.size();i++)
+    {
+        if(Nodes[i] == NULL) continue;
+        nodeAmount++;
+        if( Nodes[i]->lchild )
+            edgeAmount++;
+        if( Nodes[i]->rchild )
+            edgeAmount++;
+    }
+
     //返回结果
     this->root = Nodes.first();
     //给每一个节点编号
@@ -355,7 +367,7 @@ void BiTree::computeCoordinate(TreeNode root,float paintHeight, float paintWidth
  *
  */
 
-//从文件中同时读取多个基因的表达值
+//读取叶子节点的表达量
 void BiTree::readMultiGeneExpressionFromFile(const QString filename)
 {
     QFile file(filename);
@@ -371,12 +383,14 @@ void BiTree::readMultiGeneExpressionFromFile(const QString filename)
     bool is_first_line = 1;
    // QStringList geneNameList;   //记录所有基因的名字
     QList< QList<QString> > leafExpressinMatrix;    //所有叶子节点的表达量矩阵
-    QStringList readInLeafNodeNames;
+   // QStringList readInLeafNodeNames;
     int columnsAmount=0;          //列数
     int leafNodeAmount=0;         //叶子节点的数目
     while (!in.atEnd())
     {
         QString line = in.readLine().trimmed();
+
+        if( line.isEmpty() || line.startsWith("#") ){ continue; }
         QStringList fields = line.split("\t");
         if ( is_first_line )
         {
@@ -738,30 +752,32 @@ void BiTree::importGeneExpressionToTree(QString fileName)
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
         /*这里应该有错误处理！！！*/
     {
-        cout<<"无法打开文件"<<endl;
+        cout<<"Cannot Open File: "<< qPrintable(fileName) <<endl;
         exit(-1);
     }
+    QStringList cells; //所有细胞的名字
     QStringList genes;
     QTextStream in(&file);
-    bool is_first_line = 1;
+    bool is_first_line = true;
     int columnsAmount=0;          //列数
     while (!in.atEnd())
     {
         QString line = in.readLine().trimmed();
+        if( line.isEmpty() || line.startsWith("#") ){ continue; }
         QStringList fields = line.split("\t");
         if ( is_first_line )
         {
             columnsAmount = fields.size()+1;
-            genes = fields;
-            geneList = genes;
-            is_first_line = 0;
+            geneList = genes = fields;
+            is_first_line = false;
             continue;
         }
         if(fields.size() != columnsAmount)
         {
-            cout<<"基因表达文件错误"<<endl;
+            std::cerr<<"The Format of "<< qPrintable(fileName) << " is Error: " << qPrintable(line) <<endl;
             exit(-1);
         }
+        cells.append( fields[0] );
         bool find = false;
         for(int i=0;i<Nodes.size();i++)
         {
@@ -771,20 +787,36 @@ void BiTree::importGeneExpressionToTree(QString fileName)
                 find = true;
                 for(int j=1;j<columnsAmount;j++)
                 {
-                    Nodes[i]->geneExpression.insert(genes[j-1],QString(fields[j]).toFloat());
+                    bool *success = new bool;
+                    float myExpression = QString(fields[j]).toFloat(success);
+                    if( ! *success )
+                    {
+                        std::cerr << "The number cannot convert to Float: " << qPrintable(fields[j]) << "\t" << qPrintable(line) << "\t" << qPrintable(fileName) << endl;
+                        exit(-1);
+                    }
+                    delete success;
+                    Nodes[i]->geneExpression.insert(genes[j-1],myExpression);
                 }
                 break;
             }
         }
         if(!find)
         {
-            cout << "存在没有找到的节点: "<< qPrintable(fields[0]) <<endl;
-            exit(-1);
+            std::cerr << "Warning: A Nodes named: "<< qPrintable(fields[0]) << " occured but not found in tree" <<endl;
         }
     }
     file.close();
-}
 
+    //检查是否所有的细胞在这个文件中都有
+    for(int i=0;i<Nodes.size();i++)
+    {
+        if(cells.indexOf( Nodes[i]->nodeName ) == -1)
+        {
+            std::cerr << "TreeNode "<< qPrintable(Nodes[i]->nodeName) << " Not Found In The File: " << qPrintable(fileName) << endl;
+            exit(-1);
+        }
+    }
+}
 
 //得到每一个非叶子节点的asymmetry
 QHash< QString,float > BiTree::computeAsymmetry()
@@ -892,6 +924,213 @@ QStringList BiTree::getAllLeafNodeNames()
     return leafNodes;
 }
 
+/*把所有的矩阵输出到文件中*/
+void BiTree::outPutAllMatrix(QString path)
+{
+    SingleGeneLeafExpresion start_gene = leafExpression;
+
+    std::cout << "打印矩阵到文件中" << std::endl;
+
+    float ci = this->Ci;
+    float cd = this->Cd;
+    float psi = this->psi;
+    QTextStream out;
+
+    while(start_gene)
+    {
+        cout << qPrintable(start_gene->geneName) << endl;
+       // QStringList geneNames;
+        QString geneName = start_gene->geneName;
+        initEviroment();
+        initNewGene(start_gene);
+        computeExpression(RootNode());
+        constructEqaulMatrix(RootNode());
+        extractExpression(RootNode());
+
+       // geneNames.append(start_gene->geneName);
+        start_gene = start_gene->next;
+
+        /*每一个基因计算完成以后都写入文件*/
+        QFile G(path+"/"+geneName+".G");
+        QFile g0(path+"/"+geneName+".g0");
+        QFile CE(path+"/"+geneName+".CE");
+        QFile ce0(path+"/"+geneName+".ce0");
+        QFile CI(path+"/"+geneName+".CI");
+        QFile ci0(path+"/"+geneName+".ci0");
+        if ( !G.open(QIODevice::WriteOnly|QIODevice::Text) ||
+             !g0.open(QIODevice::WriteOnly|QIODevice::Text) ||
+             !CE.open(QIODevice::WriteOnly|QIODevice::Text) ||
+             !ce0.open(QIODevice::WriteOnly|QIODevice::Text) ||
+             !CI.open(QIODevice::WriteOnly|QIODevice::Text) ||
+             !ci0.open(QIODevice::WriteOnly|QIODevice::Text))
+        {
+            std::cerr << "Cannot Open Matrix File: " << qPrintable(path+"/"+geneName) <<std::endl;
+            exit(-1);
+        }
+
+        int n, m, p;
+
+        //矩阵G
+        out.setDevice(&G);
+        //定义矩阵
+        n = edgeAmount * 2;
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n/2; j++)
+            {
+                if(i == j) out << 2*ci*psi << "\t";
+                else out << 0 << "\t";
+            }
+            for(int j = n/2; j < n; j++)
+            {
+                if(i == j) out << 2*cd*psi << "\t";
+                else out << 0 << "\t";
+            }
+            out << "\n";
+        }
+        G.close();
+
+        //向量g0
+        out.setDevice(&g0);
+        n = edgeAmount * 2;
+        for (int i = 0; i < n/2; i++)
+            out << ci << "\n";
+        for (int i = n/2; i < n; i++)
+            out << cd << "\n";
+        g0.close();
+
+        //矩阵CE
+        out.setDevice(&CE);
+        //m为等式的数量
+        m = equalMatrix.size();
+        n = edgeAmount * 2;
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                out << equalMatrix[i][j] << "\t";
+            }
+            out << "\n";
+        }
+        CE.close();
+
+        //向量ce0
+        out.setDevice(&ce0);
+        m = equalMatrix_Value.size();
+        for (int j = 0; j < m; j++)
+            out << equalMatrix_Value[j] << "\n";
+        ce0.close();
+
+        //矩阵CI
+        out.setDevice(&CI);
+        //p为不等式的数量
+        p = 2*edgeAmount + nodeAmount;
+        n = 2*edgeAmount;
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < 2*edgeAmount; j++)
+                if(i == j)
+                    out << 1 << "\t";
+                else
+                    out << 0 << "\t";
+            out << "\n";
+         }
+        for (int i = 0; i < nodeAmount; i++)
+        {
+            for (int j = 0; j < 2*edgeAmount; j++)
+                out << ExpressionMatrix[i][j] << "\t";
+            out << "\n";
+        }
+        CI.close();
+
+        //向量ci0
+        out.setDevice(&ci0);
+        //p为不等式的数量
+        p = 2*edgeAmount + nodeAmount;
+        for (int j = 0; j < 2*edgeAmount; j++)
+            out << 0 << "\n";
+        for(int j = 2*edgeAmount; j<p; j++)
+            out << ExpressionValue[j-2*edgeAmount] << "\n";
+        ci0.close();
+    }
+}
+
+//使用CGAL的二次规划
+void MyThread::runQuadProgCGAL(ProgPP quadprogpp)
+{
+    float ci = quadprogpp->ci;
+    float cd = quadprogpp->cd;
+    double ksi = quadprogpp->psi;
+
+    int n,m,e;
+
+    int edgeAmount = quadprogpp->edgeAmount;
+    int nodeAmount = quadprogpp->nodeAmount;
+    QList< QList<int> > &equalMatrix = quadprogpp->equalMatrix;
+    QList<float> &equalMatrix_Value = quadprogpp->equalMatrix_Value;
+    QList< QList<int> > &ExpressionMatrix = quadprogpp->ExpressionMatrix;
+    QList<float> &ExpressionValue = quadprogpp->ExpressionValue;
+    QList<float> &i_and_d = quadprogpp->i_and_d;
+    float &minValue = quadprogpp->minValue;
+
+    //定义二次规划对象为非负二次规划
+    Program qp(CGAL::LARGER,true,0,false,0);
+
+    //cout << "n: " << edgeAmount * 2 <<endl;
+    //首先设置G
+    n = edgeAmount * 2;
+    for(int i=0;i<n;i++)
+        for(int j=i;j<n;j++)
+            if(i==j)
+                if(i < edgeAmount)
+                    qp.set_d(j,i,2*ksi*ci);
+                else
+                    qp.set_d(j,i,2*ksi*cd);
+            else
+                qp.set_d(j,i,0);
+
+    //设置常数项
+    qp.set_c0(0);
+
+    //设置目标表达式中的向量
+    for(int i=0;i<edgeAmount;i++)
+        qp.set_c(i,ci);
+    for(int i=edgeAmount;i<n;i++)
+        qp.set_c(i,cd);
+
+    //cout << "m: " << ExpressionMatrix.size() << endl;
+    //设置不等式项
+    m = ExpressionMatrix.size(); //不等式的项数
+    for(int i=0;i<m;i++)
+        for(int j=0;j<n;j++)
+            qp.set_a(j,i, ExpressionMatrix[i][j] );
+
+    //设置等式项
+    e = equalMatrix.size();  //等式的项数
+    for(int i=m;i<e+m;i++)
+        for(int j=0;j<n;j++)
+            qp.set_a(j,i, equalMatrix[i-m][j] );
+
+    //设置向量
+    for(int i=0;i<m;i++)
+        qp.set_b(i, ExpressionValue[i]);
+    for(int i=m;i<m+e;i++)
+        qp.set_b(i,equalMatrix_Value[i-m]);
+
+    //设置符号
+    for(int i=m;i<m+e;i++)
+        qp.set_r(i,CGAL::EQUAL);
+
+    CGAL::Quadratic_program_options option;
+    option.set_verbosity(1);
+    option.set_pricing_strategy(CGAL::QP_FILTERED_DANTZIG);
+    Solution s = CGAL::solve_nonnegative_quadratic_program(qp,ET(),option);
+
+    assert( s.solves_nonnegative_quadratic_program(qp) );
+
+    std::cout << s;
+}
+
 //构造二次规划运行矩阵，并运行
 void MyThread::runQuadProgPP(ProgPP quadprogpp)
 /*
@@ -903,7 +1142,7 @@ void MyThread::runQuadProgPP(ProgPP quadprogpp)
 
     float ci = quadprogpp->ci;
     float cd = quadprogpp->cd;
-    double psi = quadprogpp->psi;
+    double ksi = quadprogpp->psi;
 
     int edgeAmount = quadprogpp->edgeAmount;
     int nodeAmount = quadprogpp->nodeAmount;
@@ -927,12 +1166,12 @@ void MyThread::runQuadProgPP(ProgPP quadprogpp)
         {
             for (int j = 0; j < n/2; j++)
             {
-                if(i == j) G[i][j] = pow(10.0,-8);//2*ci*psi;
+                if(i == j) G[i][j] = 2*ci*ksi;//2*ci*psi;
                 else    G[i][j] = 0;
             }
             for(int j = n/2; j < n; j++)
             {
-                if(i == j) G[i][j] = pow(10.0,-8);//2*cd*psi;
+                if(i == j) G[i][j] = 2*cd*ksi; //2*cd*psi;
                 else    G[i][j] = 0;
             }
         }
@@ -985,9 +1224,8 @@ void MyThread::runQuadProgPP(ProgPP quadprogpp)
     {
         for (int j = 0; j < 2*edgeAmount; j++)
             ci0[j] = 0;
-        for(int j = 2*nodeAmount; j<p; j++)
+        for(int j = 2*edgeAmount; j<p; j++)
             ci0[j] = ExpressionValue[j-2*edgeAmount];
-
     }
     //x是要求的向量
     x.resize(n);
@@ -995,10 +1233,13 @@ void MyThread::runQuadProgPP(ProgPP quadprogpp)
    minValue = QuadProgPP::solve_quadprog(G, g0, CE, ce0, CI, ci0, x,this->thread_stop);
    // cout<<"最小值"<<minValue<<endl;
     for(int i=0;i<2*edgeAmount;i++)
+    {
         if(x[i] > 0)
             i_and_d.append(x[i]);
         else
             i_and_d.append(0);
+        cout << x[i] << "\t";
+    }
    // return quadprogminValue;
 }
 
@@ -1087,7 +1328,7 @@ void MyThread::runQuadProgPP_inboost(ProgPP quadprogpp)
     {
         for (int j = 0; j < 2*edgeAmount; j++)
             ci0(j) = 0;
-        for(int j = 2*nodeAmount; j<p; j++)
+        for(int j = 2*edgeAmount; j<p; j++)
             ci0(j) = ExpressionValue[j-2*edgeAmount];
 
     }

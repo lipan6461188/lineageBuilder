@@ -14,9 +14,37 @@
 #include <QThread>
 #include <QStringList>
 #include <QIODevice>
+#include <QHash>
+
+#include <CGAL/basic.h>
+#include <CGAL/QP_functions.h>
+#include <CGAL/QP_models.h>
+#include <CGAL/QP_solution.h>
+#include <CGAL/Quotient.h>
+#include <cassert>
+
 using namespace std;
 
+#ifdef CGAL_USE_GMP
+#include <CGAL/Gmpzf.h>
+typedef CGAL::Gmpzf ET;
+#else
+#include <CGAL/MP_Float.h>
+typedef CGAL::MP_Float ET;
+#endif
 
+typedef CGAL::Quadratic_program<ET> Program;
+typedef CGAL::Quadratic_program_solution<ET> Solution;
+
+typedef struct LeafClass
+{
+    QHash<QString, int> lClass; //每一个叶子节点描述的类型
+    int classAmount;            //类别数
+}*leafClass;
+
+
+//构造叶子节点的分类结构
+leafClass constructLeafClass(QString filename);
 
 /*
 struct BiTreeNode;          //定义节点结构，表示二叉树中的每一个节点

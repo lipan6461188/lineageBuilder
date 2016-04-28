@@ -64,10 +64,13 @@ class MyThread : public QThread
 protected:
     void run()
     {
+        //runQuadProgCGAL(quadprogpp);
+
         if(inBoost)
             runQuadProgPP_inboost(quadprogpp);
         else
             runQuadProgPP(quadprogpp);
+
     }
 public:
     //构造函数
@@ -83,6 +86,7 @@ public:
     //构造二次规划运行矩阵，并运行
     void runQuadProgPP(ProgPP quadprogpp);
     void runQuadProgPP_inboost(ProgPP quadprogpp);
+    void runQuadProgCGAL(ProgPP quadprogpp);
     ProgPP getquadprogpp(){return quadprogpp;}
     QString getGeneName(){ return geneName; }
 
@@ -150,6 +154,8 @@ public:
     void importGeneExpressionToTree(QString fileName);
     //得到每一个非叶子节点的asymmetry
     QHash<QString, float> computeAsymmetry();
+    /*把所有的矩阵输出到文件中*/
+    void outPutAllMatrix(QString path);
 
     //构造二次规划运行矩阵，并运行
   //  static float runQuadProgPP(ProgPP quadprogpp);
@@ -253,15 +259,14 @@ private:
 
     int leafNodesNum;
 
-    int TREE_WIDTH;
-    int TREE_HEIGHT;
-
     //算法的三个参数
     float Ci;
     float Cd;
     double psi;
 
-
+public:
+    int TREE_WIDTH;
+    int TREE_HEIGHT;
 
 };
 

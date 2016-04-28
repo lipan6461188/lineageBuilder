@@ -30,14 +30,16 @@ public:
                              QString wordColor, QString lineStyle,
                             float circleMagnitude, float lineMagnitude);
     //只绘制树的结构
-    bool paintTreeStructureAndSave(QString filePath);
+    bool paintTreeStructureAndSave(QString filePath, int drawNameDepth=0);
     //绘制数的结构以及节点的名字
-    bool paintTreeStructureWithNameAndSave(QString filePath);
+    bool paintTreeStructureWithNameAndSave(QString filePath, int drawNameDepth=0);
     //绘制树的结构与多线程表达量
-    bool paintTreeStructureWithExpression(QString filePath,QString geneName);
+    bool paintTreeStructureWithExpression(QString filePath, QString geneName, int drawNameDepth=0);
     float findMaxExpression(QString geneName); //获取某一个基因的最大表达量
-    void paintAllGene(QString directory);   //在目录下画所有基因表达图片
-    void drawAsymetryPlot(QString fileName);    //画differentiation map
+    void paintAllGene(QString directory, int drawNameDepth=0);   //在目录下画所有基因表达图片
+    void drawAsymetryPlot(QString fileName, int drawNameDepth=0);    //画differentiation map
+
+    bool drawLeafClass(leafClass lc, QString filePath,int depth=0, int bias = 25);   //画出叶子节点的分类
 
 private:
     BiTree *bitree;
@@ -47,6 +49,7 @@ private:
     bool draw_name; //是否绘制名字
     bool draw_expression; //是否绘制表达量
     bool draw_ellipse;      //是否绘制基因表达量
+    bool draw_class;    //是否绘制叶子节点的类别
     QString drawGeneExpression; //绘制哪一个基因的表达量
 
     //所有颜色的哈希
@@ -62,15 +65,22 @@ private:
     QColor circleColor;
     QColor bgColor;
     QColor wordColor;
+    QList<QColor> colorList;   //绘制类别
     Qt::PenStyle lineStyle;
     float circleMagnitude;      //20
     float lineMagnitude;        //5
+    int drawNameDepth;          //当深度小于这个数时就绘制名字
 
+    leafClass lc;
 
 private:
-    void recursivePaintTreeStructure(QPainter *paint, TreeNode root);
+    void drawTree(QPainter *paint);
     bool draw(QString filePath);
     void recursiveFindMaxExpression(TreeNode root, QString geneName, float& maxExpression);
+
+    //临时变量
+private:
+    int bias;   //绘制类别时字符的偏移数
 };
 
 #endif // PAINTBITREE_H

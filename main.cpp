@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QTime>
 #include <QTimer>
+#include <QHash>
 using namespace std;
 
 /*
@@ -19,8 +20,12 @@ void PrintHelp() {
     cout << "-f <filename>: cell division file. REQUIRED\n"; //结构文件
     cout << "--expression <filename>: read all gene expression and plot. If -e is specific, this item will be ignored.\n";
     cout << "-e <filename>: terminal cell expression file\n"; //叶子节点细胞表达文件
+    cout << "--leafClass <filename>: the file to descript the class of every leaves\n"; //叶子节点细胞表达文件
     cout << "-a <filename>: output the asymmetry of the nonleaf nodes to the file.\n";
+    cout << "--saveMatrix: save all quadProg Matrix to the files. (default no).\n";
     cout << "--draw <ITEMS>. ITEMS: S/N/E  S:Structure Only, N:Structure with Names, E:Structure with Expression (default: S)\n";
+    cout << "--depth <int>: the max depth of nodes to label the cell name (default: 1).\n";
+    cout << "--classLabel <int>: wheather to draw class label of each leaf Node, below -100 won\'t draw (default: 25).\n";
     cout << "-Ci <float>: Value of Ci (default: 1).\n";
     cout << "-Cd <float>: Value of Cd (default: 1).\n";
     cout << "-ksi <float>: Value of ksi,for example: 10e-10 (default:10^-14).\n";
@@ -67,17 +72,21 @@ int main(int argc, char *argv[])
     QString expressionFileName = "";
     QString rootPath = QDir::currentPath();
     QString allGeneExpressionFileName = "";
+    QString leafClassFile = "";
     QString randomExpressionFileName = "";
     QString asymetryFileName = "";
     bool will_draw_structre = true;
     bool will_draw_names = false;
     bool will_draw_expression = false;
     bool will_run_in_boost = false;
+    bool will_save_matrix = false;
     float Ci = 1;
     float Cd = 1;
     int width = 1500;
     int height = 500;
     int threads_to_run = 1;
+    int depth = 1;
+    int classLabel = 25;
     double ksi = pow(10.0,-14);
    // bool will_compute_expression = false;
     bool will_output_to_screen = false;
@@ -132,8 +141,20 @@ int main(int argc, char *argv[])
             asymetryFileName = argv[i + 1];
             i++;
         }
+        if (!strcmp(argv[i], "--depth")) {
+            depth = QString(argv[i + 1]).toInt();
+            i++;
+        }
+        if (!strcmp(argv[i], "--classLabel")) {
+            classLabel = QString(argv[i + 1]).toInt();
+            i++;
+        }
         if (!strcmp(argv[i], "--timer")) {
             _timer = QString(argv[i + 1]).toInt();
+            i++;
+        }
+        if (!strcmp(argv[i], "--leafClass")) {
+            leafClassFile = QString(argv[i + 1]);
             i++;
         }
         if (!strcmp(argv[i], "--expression")) {
@@ -189,6 +210,9 @@ int main(int argc, char *argv[])
         }
         if(!strcmp(argv[i], "--boost")){
             will_run_in_boost = true;
+        }
+        if(!strcmp(argv[i], "--saveMatrix")){
+            will_save_matrix = true;
         }
         if(!strcmp(argv[i], "--sef")){
             expressionFileName = argv[i + 1];
@@ -291,11 +315,12 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
+    /*直接读入基因表达数据*/
     if(allGeneExpressionFileName != "" && leafNodeExpressionFileName == NULL)
     {
         bitree->importGeneExpressionToTree(allGeneExpressionFileName);
         if(will_draw_expression)
-            tree.paintAllGene(rootPath);
+            tree.paintAllGene(rootPath,depth);
     }
 
     //进行大量的表达计算
@@ -308,6 +333,11 @@ int main(int argc, char *argv[])
             exit(-1);
         }
         bitree->readMultiGeneExpressionFromFile(leafNodeExpressionFileName);
+        if(will_save_matrix)
+        {
+            bitree->outPutAllMatrix(rootPath);
+            return 1;
+        }
         //timer
         bitree->runOnMultiThread(threads_to_run,will_run_in_boost,_timer);
         if(expressionFileName != "")
@@ -315,10 +345,8 @@ int main(int argc, char *argv[])
             bitree->saveExpressionIntoFile(rootPath+"/"+expressionFileName);
             cout << "Save File: " << QString(rootPath+"/"+expressionFileName).toStdString() << endl;
         }
-
-
         if(will_draw_expression)
-            tree.paintAllGene(rootPath);
+            tree.paintAllGene(rootPath,depth);
     }
     //cout << "开始====\n"<<allGeneExpressionFileName.toStdString() <<"\n"<< leafNodeExpressionFileName.toStdString()<<endl;
     if(allGeneExpressionFileName != "" || leafNodeExpressionFileName != NULL)
@@ -342,20 +370,25 @@ int main(int argc, char *argv[])
                 out << geneList[i]<<"\t"<<hash[geneList[i]]<<"\n";
             }
             file.close();
-             tree.drawAsymetryPlot(rootPath+"/"+asymetryFileName+".png");
+             tree.drawAsymetryPlot(rootPath+"/"+asymetryFileName+".png",depth);
         }
     }
 
 
+    if( !leafClassFile.isEmpty() )
+    {
+        leafClass lc = constructLeafClass(leafClassFile);
+        tree.drawLeafClass(lc,rootPath+"/leafClass.png",depth,classLabel);
+    }
+
     bool result;
 
     if(will_draw_structre)
-        result = tree.paintTreeStructureAndSave(rootPath+"/structure.png");
+        result = tree.paintTreeStructureAndSave(rootPath+"/structure.png",depth);
     if(will_draw_names)
-        result = tree.paintTreeStructureWithNameAndSave(rootPath+"/structureWithNames.png");
+        result = tree.paintTreeStructureWithNameAndSave(rootPath+"/structureWithNames.png",depth);
     if(!result)
         std::cerr << "保存失败"<<endl;
 
-
-    return a.exec();
+    return 0;
 }
